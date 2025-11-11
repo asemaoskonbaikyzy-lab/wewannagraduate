@@ -1,46 +1,76 @@
-// app.js
-// Handles event creation and real-time display of a user's schedule.
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import './styles/App.css';
+import './styles/Calendar.css';
+import './styles/AccessibilityThemes.css';
+import HomePage from './pages/HomePage.js';
+import CalendarPage from './pages/CalendarPageFinal.js';
+import EventsPage from './pages/EventsPage.js';
+import FriendsPage from './pages/FriendsPage.js';
+import { AuthProvider } from './hooks/useAuth.js';
+import { AccessibilityProvider, useAccessibility } from './hooks/useAccessibility.js';
+import AccessibilityButton from './components/AccessibilityButton.js';
 
-const form = document.getElementById('event-form');
-const calendar = document.getElementById('calendar');
+// Announces route changes to screen readers
+function RouteAnnouncer() {
+  const location = useLocation();
+  const { announcePolite, screenReaderMode } = useAccessibility();
+  useEffect(() => {
+    if (!screenReaderMode) return;
+    const path = location.pathname;
+    const pageName =
+      path === '/' ? 'Home' : path.replace('/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    announcePolite(`${pageName} page loaded`);
+  }, [location, announcePolite, screenReaderMode]);
+  return null;
+}
 
-form.addEventListener('submit', async e => {
-  e.preventDefault();
-  const user = firebase.auth().currentUser;
-  if (!user) return;
+function App() {
+  // Focus target for skip link is the main element with id="main-content"
+  const onSkipToContent = (e) => {
+    e.preventDefault();
+    const main = document.getElementById('main-content');
+    if (main) {
+      main.setAttribute('tabindex', '-1');
+      main.focus();
+      // Remove tabindex after focus to keep DOM clean
+      const remove = () => main.removeAttribute('tabindex');
+      main.addEventListener('blur', remove, { once: true });
+    }
+  };
 
-  const title = document.getElementById('event-title').value;
-  const time = document.getElementById('event-time').value;
+  return (
+    <AccessibilityProvider>
+      <AuthProvider>
+        <Router>
+          <RouteAnnouncer />
+          <div className="App">
+            <a href="#main-content" className="skip-link" onClick={onSkipToContent}>
+              Skip to main content
+            </a>
+            <header className="app-header">
+              <h1 id="app-title">Availability Scheduler</h1>
+              <nav aria-label="Primary">
+                <a href="/">Home</a>
+                <a href="/calendar">My Schedule</a>
+                <a href="/events">Events</a>
+                <a href="/friends">Friends</a>
+              </nav>
+            </header>
+            <main id="main-content">
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/calendar" element={<CalendarPage />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/friends" element={<FriendsPage />} />
+              </Routes>
+            </main>
+            <AccessibilityButton />
+          </div>
+        </Router>
+      </AuthProvider>
+    </AccessibilityProvider>
+  );
+}
 
-  try {
-    await db.collection('events').add({
-      title: title,
-      time: time,
-      createdBy: user.uid,
-      shared: false
-    });
-  } catch (error) {
-    console.error('Error:', error);
-  }
-
-  form.reset();
-});
-
-firebase.auth().onAuthStateChanged(user => {
-  if (user) {
-    db.collection('events')
-      .where('createdBy', '==', user.uid)
-      .orderBy('time')
-      .onSnapshot(snapshot => {
-        calendar.innerHTML = '';
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const eventDiv = document.createElement('div');
-          eventDiv.textContent = `${data.time} - ${data.title}`;
-          calendar.appendChild(eventDiv);
-        });
-      });
-  } else {
-    calendar.innerHTML = '<p>Please sign in to view your schedule.</p>';
-  }
-});
+export default App;
